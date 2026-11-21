@@ -1,0 +1,21 @@
+services:
+  video-translator-server:
+    build:
+      context: .
+      args:
+        http_proxy: ${http_proxy:-}
+        https_proxy: ${https_proxy:-}
+        no_proxy: ${no_proxy:-}
+    image: video-translator-server:latest
+    container_name: video-translator-server
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:17497:17497"
+    environment:
+      VT_KEEP_DAYS: ${VT_KEEP_DAYS:-3}
+      VT_MAX_UPLOAD_MB: ${VT_MAX_UPLOAD_MB:-4096}
+    volumes:
+      - video-translator-data:/data
+
+volumes:
+  video-translator-data:

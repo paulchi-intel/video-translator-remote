@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="en" translate="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="google" content="notranslate">
+  <title>Video Translator Remote</title>
+  <style>
+    :root {
+      /* Motion — duration palette */
+      --d-quick: 140ms;
+      --d-std: 260ms;
+      /* Motion — easing families */
+      --e-standard: cubic-bezier(0.2, 0, 0, 1);            /* signature on-screen */
+      --e-emphasized: cubic-bezier(0.05, 0.7, 0.1, 1);     /* entrances */
+      --e-accel: cubic-bezier(0.3, 0, 1, 1);               /* exits */
+      --e-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275); /* playful pop */
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f3f4f6;
+      color: #1f2937;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Header */
+    .header-bar {
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+      background-size: 260% 260%;
+      animation: header-shimmer 16s ease-in-out infinite;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      color: white;
+      box-shadow: 0 4px 18px rgba(79, 70, 229, 0.28);
+      gap: 8px;
+      flex-shrink: 0;
+      z-index: 5;
+    }
+    /* Ambient layer: a soft highlight that slowly breathes across the header */
+    .header-bar::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(180px 100px at 22% -8%, rgba(255, 255, 255, 0.55), transparent 72%);
+      pointer-events: none;
+      opacity: 0.4;
+      will-change: transform, opacity;
+      animation: header-sheen 20s ease-in-out infinite;
+      transition: opacity 260ms cubic-bezier(0.2, 0, 0, 1);
+    }
+    /* Pause the sheen while the cursor spotlight is active, or when the user
+       has toggled it off (double-click on an empty header area) */
+    .header-bar.lit::after,
+    .header-bar.sheen-off::after {
+      animation: none;
+      opacity: 0;
+    }
+    /* Interactive layer: a glow that trails the pointer */
+    .header-bar::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      background: radial-gradient(220px 180px at var(--mx, 50%) var(--my, 50%),
+                  rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.18) 45%, transparent 72%);
+      pointer-events: none;
+      opacity: 0;
+      mix-blend-mode: screen;
+      transition: opacity 260ms cubic-bezier(0.2, 0, 0, 1);
+    }
+    .header-bar.lit::before { opacity: 0.5; }
+    @keyframes header-shimmer {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    @keyframes header-sheen {
+      0%   { transform: translateX(-35%); opacity: 0.25; }
+      50%  { transform: translateX(65%);  opacity: 0.9; }
+      100% { transform: translateX(-35%); opacity: 0.25; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .header-bar, .header-bar::after { animation: none; }
+    }
+    .header-title { position: relative; z-index: 1; font-size: 15px; font-weight: 700; white-space: nowrap; display: flex; align-items: center; gap: 6px; flex: 1; }
+    .header-right { position: relative; z-index: 1; display: flex; align-items: center; gap: 6px; }
+    .language-selector {
+      border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.12);
+      color: white; border-radius: 8px; padding: 4px 18px 4px 7px;
+      font-size: 11px; font-weight: 600; cursor: pointer; min-width: 62px; width: 62px;
+    }
+    .language-selector option { color: #1f2937; }
+
+    /* Animated brand mark (line-art microphone that draws itself in + breathing sound waves) */
+    .brand-mark {
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+      overflow: visible;
+      transition: transform var(--d-std) var(--e-spring);
+    }
+    .header-title:hover .brand-mark { transform: rotate(-8deg) scale(1.1); }
+    .brand-mark .draw {
+      stroke-dasharray: 60;
+      stroke-dashoffset: 60;
+      animation: svg-draw 0.7s var(--e-emphasized) forwards;
+    }
+    .brand-mark .bm-wave {
+      opacity: 0;
+      animation: wave-in 0.4s var(--e-emphasized) forwards, node-pulse 2.8s var(--e-standard) 0.9s infinite;
+    }
+    .brand-mark .bm-wave.w2 { animation-delay: 0.62s, 1.4s; }
+    .brand-mark .bm-node {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: node-pulse 2.8s var(--e-standard) infinite;
+    }
+    .brand-mark .bm-halo {
+      transform-box: fill-box;
+      transform-origin: center;
+      opacity: 0;
+      animation: node-ping 2.4s var(--e-emphasized) infinite;
+    }
+    @keyframes svg-draw { to { stroke-dashoffset: 0; } }
+    @keyframes wave-in { to { opacity: 1; } }
+    @keyframes node-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    @keyframes node-ping {
+      0% { transform: scale(1); opacity: 0.55; }
+      70%, 100% { transform: scale(2.3); opacity: 0; }
+    }
+
+    /* Icon-only header buttons */
+    .icon-btn {
+      padding: 0;
+      width: 30px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      color: white;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: background var(--d-quick) var(--e-standard),
+                  transform var(--d-quick) var(--e-standard),
+                  box-shadow var(--d-quick) var(--e-standard);
+    }
+    .icon-btn:hover {
+      background: rgba(255, 255, 255, 0.24);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
+    }
+    .icon-btn:active { transform: translateY(0) scale(0.96); }
+    .icon-btn .hb-icon { width: 16px; height: 16px; display: block; }
+    .panel-btn.tog .hb-icon { animation: hb-flip 440ms var(--e-standard); }
+
+    /* Shared click feedback for icon buttons (header + body) */
+    .tog .hb-icon { animation: hb-pop 380ms var(--e-spring); }
+    .save-btn .hb-arrow { transform-box: fill-box; transform-origin: center; }
+    .save-btn.tog .hb-arrow { animation: hb-save 480ms var(--e-spring); }
+    @keyframes hb-pop {
+      0%   { transform: scale(0.7) rotate(-12deg); }
+      60%  { transform: scale(1.14) rotate(5deg); }
+      100% { transform: scale(1) rotate(0); }
+    }
+    @keyframes hb-save {
+      0%   { transform: translateY(-4px); opacity: 0.4; }
+      45%  { transform: translateY(2px);  opacity: 1; }
+      100% { transform: translateY(0); }
+    }
+    @keyframes hb-flip {
+      0%   { transform: rotateY(0); }
+      50%  { transform: rotateY(90deg); }
+      100% { transform: rotateY(0); }
+    }
+    @keyframes hb-spin { to { transform: rotate(-360deg); } }
+
+    .app-version { font-size: 10px; font-weight: 600; color: rgba(255, 255, 255, 0.78); }
+
+    /* Update banner */
+    .update-banner {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 8px 12px; border-bottom: 1px solid #bfdbfe;
+      background: #eff6ff; color: #1e3a8a; font-size: 12px; line-height: 1.4;
+      flex-shrink: 0;
+    }
+    .update-banner[hidden] { display: none; }
+    .update-banner > svg { width: 16px; height: 16px; flex: 0 0 16px; }
+    .update-message { min-width: 0; flex: 1; }
+    .update-btn {
+      flex: 0 0 auto; padding: 4px 10px; border: none; border-radius: 6px;
+      background: #2563eb; color: #fff; font: inherit; font-weight: 700; cursor: pointer;
+      white-space: nowrap; transition: background var(--d-quick) var(--e-standard);
+    }
+    .update-btn:hover:not(:disabled) { background: #1d4ed8; }
+    .update-btn:disabled { opacity: 0.6; cursor: default; }
+    .update-dismiss {
+      width: 24px; height: 24px; flex: 0 0 24px; border: 0; border-radius: 50%;
+      background: transparent; color: #1e40af; font: inherit; font-size: 17px; line-height: 24px; cursor: pointer;
+    }
+    .update-dismiss:hover { background: #dbeafe; }
+
+    /* Status bar */
+    .status-bar {
+      background: #fff; border-bottom: 1px solid #e5e7eb;
+      font-size: 11px; color: #6b7280;
+      display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden;
+    }
+    .status-bar-row { padding: 5px 12px; display: flex; align-items: center; gap: 6px; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #10b981; flex-shrink: 0; transition: background 0.3s; }
+    .status-dot.loading { background: #f59e0b; animation: pulse 1.5s ease-in-out infinite; }
+    .status-dot.error   { background: #ef4444; }
+    .status-dot.offline { background: #94a3b8; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .start-btn {
+      padding: 3px 10px; background: #6d28d9;
+      color: white; border: none; border-radius: 4px; font-size: 10px;
+      font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap;
+      align-items: center; gap: 4px;
+    }
+    .start-btn:hover { background: #5b21b6; }
+    .start-btn .hb-icon { width: 11px; height: 11px; display: block; transition: transform var(--d-std) var(--e-spring); }
+    .start-btn:hover .hb-icon { transform: rotate(-90deg); }
+    .start-btn.tog .hb-icon { animation: hb-spin 520ms var(--e-standard); }
+    .start-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .status-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+    .status-gear {
+      width: 22px; height: 22px; padding: 0; background: none; border: none; border-radius: 6px;
+      color: #94a3b8; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+      transition: color var(--d-quick) var(--e-standard), background var(--d-quick) var(--e-standard);
+    }
+    .status-gear .hb-icon { width: 14px; height: 14px; display: block; transition: transform var(--d-std) var(--e-spring); }
+    .status-gear:hover { color: #6d28d9; background: #f5f3ff; }
+    .status-gear:hover .hb-icon { transform: rotate(60deg); }
+    .status-gear.open { color: #6d28d9; background: #ede9fe; }
+    .status-gear.open .hb-icon { transform: rotate(90deg); }
+    .status-gear.attn { color: #f59e0b; animation: pulse 1.5s ease-in-out infinite; }
+    .server-pop {
+      display: grid; grid-template-rows: 0fr;
+      transition: grid-template-rows var(--d-std) var(--e-standard);
+    }
+    .server-pop.open { grid-template-rows: 1fr; }
+    .server-pop > div { overflow: hidden; min-height: 0; }
+    .server-pop .lang-row { margin: 0; padding: 4px 12px 8px; }
+    .status-progress { height: 3px; background: transparent; overflow: hidden; }
+    .status-bar.generating .status-progress { background: #f1f5f9; }
+    .status-progress-bar {
+      height: 100%; width: 35%; background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+      border-radius: 2px; display: none; animation: status-slide 1.4s ease-in-out infinite;
+    }
+    .status-bar.generating .status-progress-bar { display: block; }
+    @keyframes status-slide { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+
+    /* Tab bar */
+    .tab-bar {
+      display: flex; background: white;
+      border-bottom: 2px solid #e5e7eb; flex-shrink: 0;
+    }
+    .tab-btn {
+      flex: 1; padding: 9px 8px; background: none; border: none;
+      font-size: 13px; font-weight: 600; color: #6b7280;
+      cursor: pointer; border-bottom: 2px solid transparent;
+      margin-bottom: -2px; transition: all 0.2s; font-family: inherit;
+    }
+    .tab-btn.active { color: #3b82f6; border-bottom-color: #3b82f6; }
+    .tab-btn:hover:not(.active) { color: #374151; background: #f9fafb; }
+    .tab-badge {
+      display: inline-block; background: #6d28d9; color: white;
+      font-size: 10px; font-weight: 700; border-radius: 10px;
+      padding: 0 5px; margin-left: 4px; min-width: 16px;
+      text-align: center; line-height: 16px; vertical-align: middle;
+    }
+    .tab-badge.hidden { display: none; }
+
+    /* Panels */
+    .panel { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+    .panel.hidden { display: none; }
+
+    /* Setup content */
+    .content {
+      flex: 1; overflow-y: auto; padding: 12px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .content::-webkit-scrollbar { width: 5px; }
+    .content::-webkit-scrollbar-track { background: #f1f5f9; }
+    .content::-webkit-scrollbar-thumb { background: #8b5cf6; border-radius: 3px; }
+
+    /* Step cards */
+    .steps { display: flex; flex-direction: column; gap: 16px; }
+    .step-card {
+      position: relative; background: #fff; border: 1.5px solid #e5e7eb; border-radius: 12px;
+      transition: border-color var(--d-std) var(--e-standard), box-shadow var(--d-std) var(--e-standard);
+    }
+    .step-card.current { border-color: #c4b5fd; box-shadow: 0 2px 10px rgba(109, 40, 217, 0.10); }
+    .step-card.done { border-color: #a7f3d0; }
+    /* Connector line down to the next step; fills green once this step is done */
+    .step-card:not(:last-child)::after {
+      content: ""; position: absolute; left: 22px; top: calc(100% + 1.5px);
+      width: 2px; height: 16px; background: #e5e7eb; border-radius: 1px;
+    }
+    .step-card.done:not(:last-child)::after {
+      background: #10b981; transform-origin: top; animation: link-grow 0.4s var(--e-emphasized);
+    }
+    @keyframes link-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+    .step-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; min-width: 0; }
+    .step-card.collapsible .step-head { cursor: pointer; user-select: none; }
+    .step-num {
+      position: relative; width: 22px; height: 22px; flex-shrink: 0; border-radius: 50%;
+      border: 2px solid #d1d5db; color: #9ca3af; background: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; line-height: 1;
+      transition: background var(--d-std) var(--e-standard), border-color var(--d-std) var(--e-standard),
+                  color var(--d-std) var(--e-standard), transform var(--d-std) var(--e-spring);
+    }
+    .step-card.current .step-num { background: #6d28d9; border-color: #6d28d9; color: #fff; }
+    .step-card.done .step-num { background: #10b981; border-color: #10b981; color: #fff; }
+    .step-card.done .step-num { transform: scale(1.06); }
+    .step-n { transition: opacity var(--d-quick) var(--e-standard); }
+    .step-card.done .step-n { opacity: 0; }
+    .step-check { position: absolute; inset: 0; width: 100%; height: 100%; padding: 2px; }
+    .step-check path { stroke-dasharray: 24; stroke-dashoffset: 24; stroke-width: 3; }
+    .step-card.done .step-check path { animation: svg-draw 0.45s var(--e-emphasized) 0.05s forwards; }
+    .step-title { font-size: 13px; font-weight: 700; color: #1f2937; white-space: nowrap; }
+    .step-card.current .step-title { color: #5b21b6; }
+    .step-summary {
+      flex: 1; min-width: 0; text-align: right; font-size: 11px; color: #6b7280;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0;
+      transition: opacity var(--d-std) var(--e-standard);
+    }
+    .step-card.collapsed .step-summary { opacity: 1; }
+    .step-toggle {
+      flex-shrink: 0; width: 20px; height: 20px; color: #9ca3af; display: none;
+      align-items: center; justify-content: center; margin-left: auto;
+    }
+    .step-card.collapsible .step-toggle { display: inline-flex; }
+    .step-card.collapsible .step-summary { margin-left: auto; }
+    .step-toggle .hb-icon { width: 14px; height: 14px; display: block; transition: transform var(--d-std) var(--e-spring); }
+    .step-card.collapsed .step-toggle .hb-icon { transform: rotate(-90deg); }
+    .step-card.collapsible .step-head:hover .step-toggle { color: #6d28d9; }
+    .step-body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows var(--d-std) var(--e-standard); }
+    .step-card.collapsed .step-body { grid-template-rows: 0fr; }
+    .step-body > div { overflow: hidden; min-height: 0; }
+    .step-body-inner { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+    .field-hint { font-size: 11px; color: #6b7280; line-height: 1.4; }
+    .step-missing {
+      display: flex; align-items: flex-start; gap: 6px; padding: 7px 10px; border-radius: 8px;
+      font-size: 11px; line-height: 1.5; background: #fffbeb; color: #92400e; border: 1px solid #fde68a;
+    }
+    .step-missing .hb-icon { width: 14px; height: 14px; flex-shrink: 0; margin-top: 1px; display: block; }
+    .step-missing .ic-ok { display: none; }
+    .step-missing.ready { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+    .step-missing.ready .ic-ok { display: block; }
+    .step-missing.ready .ic-warn { display: none; }
+
+    /* Profile bar */
+    .profile-bar {
+      display: flex; align-items: center; gap: 6px;
+    }
+    .profile-select {
+      flex: 1; border: 1.5px solid #e2e8f0; border-radius: 8px;
+      padding: 6px 8px; font-size: 12px; font-family: inherit;
+      color: #374151; background: white; transition: border-color 0.2s;
+    }
+    .profile-select:focus { outline: none; border-color: #7c3aed; }
+    .profile-btn {
+      background: none; border: 1.5px solid #e2e8f0; border-radius: 8px;
+      padding: 0; width: 34px; cursor: pointer; color: #64748b;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: background var(--d-quick) var(--e-standard), border-color var(--d-quick) var(--e-standard),
+                  color var(--d-quick) var(--e-standard), transform var(--d-quick) var(--e-standard);
+      flex-shrink: 0;
+    }
+    .profile-btn .hb-icon { width: 16px; height: 16px; display: block; }
+    .profile-btn:hover:not(:disabled) { transform: translateY(-1px); }
+    .profile-btn:active:not(:disabled) { transform: translateY(0) scale(0.96); }
+    .profile-btn.save-btn:hover   { background: #ede9fe; border-color: #a5b4fc; color: #6d28d9; }
+    .profile-btn.delete-btn:hover:not(:disabled) { background: #fee2e2; border-color: #fca5a5; color: #dc2626; }
+    .delete-btn .hb-lid { transform-box: fill-box; transform-origin: 0% 100%; transition: transform var(--d-std) var(--e-spring); }
+    .delete-btn:hover:not(:disabled) .hb-lid { transform: rotate(-14deg) translateY(-1px); }
+    .profile-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* File drop zone */
+    .file-drop-zone {
+      border: 2px dashed #d1d5db; border-radius: 10px; padding: 14px 10px;
+      text-align: center; cursor: pointer; transition: all 0.2s; position: relative;
+      background: #f9fafb; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .file-drop-zone:hover { border-color: #8b5cf6; background: #f5f3ff; }
+    .file-drop-zone.drag-over { border-color: #3b82f6; background: #eff6ff; border-style: solid; }
+    .file-drop-zone.has-file { border-color: #10b981; background: #ecfdf5; border-style: solid; }
+    .file-drop-zone-icon { width: 34px; height: 34px; margin-bottom: 4px; pointer-events: none; color: #8b5cf6; overflow: visible; }
+    .file-drop-zone-icon .draw {
+      stroke-dasharray: 60;
+      stroke-dashoffset: 60;
+      animation: svg-draw 0.8s var(--e-emphasized) forwards;
+    }
+    .file-drop-zone-icon .dz-wave { opacity: 0; transition: opacity var(--d-std) var(--e-standard); }
+    .file-drop-zone:hover .file-drop-zone-icon .dz-wave,
+    .file-drop-zone.drag-over .file-drop-zone-icon .dz-wave { opacity: 1; animation: node-pulse 1.4s var(--e-standard) infinite; }
+    .file-drop-zone:hover .file-drop-zone-icon .dz-wave.w2,
+    .file-drop-zone.drag-over .file-drop-zone-icon .dz-wave.w2 { animation-delay: 0.35s; }
+    .file-drop-zone.drag-over .file-drop-zone-icon { color: #3b82f6; animation: empty-float 1.2s ease-in-out infinite; }
+    .file-drop-zone.has-file .file-drop-zone-icon { color: #10b981; }
+    .file-drop-zone-label { font-size: 13px; font-weight: 600; color: #374151; pointer-events: none; }
+    .file-drop-zone-hint  { font-size: 11px; color: #6b7280; margin-top: 3px; pointer-events: none; }
+    .file-drop-zone-filename {
+      font-size: 12px; color: #065f46; margin-top: 6px; font-weight: 600;
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none;
+    }
+    .file-drop-zone-remove {
+      position: absolute; top: 4px; right: 6px; background: none; border: none;
+      color: #9ca3af; cursor: pointer; padding: 4px; border-radius: 4px; display: none;
+    }
+    .file-drop-zone-remove .hb-icon { width: 13px; height: 13px; display: block; transition: transform var(--d-std) var(--e-spring); }
+    .file-drop-zone-remove:hover .hb-icon { transform: rotate(90deg); }
+    .file-drop-zone.has-file .file-drop-zone-remove { display: block; }
+    .file-drop-zone-remove:hover { background: #fee2e2; color: #dc2626; }
+    .file-drop-zone input[type="file"] { display: none; }
+
+    /* Audio preview */
+    .audio-preview { display: none; }
+    .audio-preview.show { display: block; }
+    .audio-preview audio { width: 100%; height: 32px; border-radius: 6px; }
+
+    /* Form */
+    textarea, select, input[type="text"] {
+      width: 100%; padding: 8px 10px; border: 1.5px solid #e2e8f0;
+      border-radius: 7px; font-size: 12px; font-family: inherit;
+      color: #1e293b; background: #fff; transition: border-color 0.2s; resize: vertical;
+    }
+    textarea:focus, select:focus, input[type="text"]:focus { outline: none; border-color: #7c3aed; }
+    textarea { line-height: 1.5; }
+    #referenceTextarea { min-height: 120px; max-height: 200px; }
+    #synthesisTextarea { min-height: 160px; max-height: 320px; }
+    .lang-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .lang-row label { font-size: 11px; font-weight: 600; color: #475569; white-space: nowrap; }
+    .lang-row select, .lang-row input { flex: 1; min-width: 0; }
+
+    /* Generate button */
+    #generateBtn {
+      width: 100%; padding: 11px;
+      background: linear-gradient(135deg, #6d28d9, #8b5cf6);
+      color: white; border: none; border-radius: 9px;
+      font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit;
+      position: relative; overflow: hidden;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: transform var(--d-quick) var(--e-standard),
+                  box-shadow var(--d-std) var(--e-standard),
+                  opacity var(--d-quick) var(--e-standard);
+    }
+    #generateBtn::before {
+      content: ""; position: absolute; inset: 0;
+      background: rgba(255, 255, 255, 0.18); opacity: 0;
+      transition: opacity var(--d-quick) var(--e-standard);
+    }
+    #generateBtn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(109, 40, 217, 0.34); }
+    #generateBtn:hover:not(:disabled)::before { opacity: 1; }
+    #generateBtn:active:not(:disabled) { transform: translateY(0) scale(0.97); }
+    #generateBtn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    /* Waveform icon: bars bounce like an equalizer on hover, a spark pops in,
+       and the whole wave "launches" on press */
+    .gen-icon { width: 18px; height: 18px; flex-shrink: 0; overflow: visible; position: relative; }
+    .gen-icon .bar { transform-box: fill-box; transform-origin: center; transition: transform var(--d-std) var(--e-spring); }
+    .gen-icon .spark {
+      transform-box: fill-box; transform-origin: center;
+      transform: scale(0) rotate(-45deg); opacity: 0;
+      transition: transform var(--d-std) var(--e-spring), opacity var(--d-quick) var(--e-standard);
+    }
+    #generateBtn:hover:not(:disabled) .gen-icon .spark { transform: scale(1) rotate(0); opacity: 1; animation: gen-twinkle 1.8s ease-in-out 0.3s infinite; }
+    #generateBtn:hover:not(:disabled) .gen-icon .bar { animation: eq-bounce 0.9s ease-in-out infinite; }
+    #generateBtn:hover:not(:disabled) .gen-icon .b1 { animation-delay: 0s; }
+    #generateBtn:hover:not(:disabled) .gen-icon .b2 { animation-delay: 0.12s; }
+    #generateBtn:hover:not(:disabled) .gen-icon .b3 { animation-delay: 0.24s; }
+    #generateBtn:hover:not(:disabled) .gen-icon .b4 { animation-delay: 0.08s; }
+    #generateBtn:hover:not(:disabled) .gen-icon .b5 { animation-delay: 0.2s; }
+    @keyframes eq-bounce { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.45); } }
+    @keyframes gen-twinkle { 0%, 100% { opacity: 0.55; transform: scale(0.85) rotate(0); } 50% { opacity: 1; transform: scale(1.15) rotate(20deg); } }
+    /* Press: bars shoot up in a ripple, then settle (replaces the hover loop) */
+    #generateBtn.go .gen-icon .bar { animation: wave-launch 0.55s var(--e-accel); }
+    #generateBtn.go .gen-icon .b2 { animation-delay: 0.04s; }
+    #generateBtn.go .gen-icon .b3 { animation-delay: 0.08s; }
+    #generateBtn.go .gen-icon .b4 { animation-delay: 0.12s; }
+    #generateBtn.go .gen-icon .b5 { animation-delay: 0.16s; }
+    @keyframes wave-launch {
+      0%   { transform: translateY(0) scaleY(1); opacity: 1; }
+      35%  { transform: translateY(-7px) scaleY(1.5); opacity: 1; }
+      36%  { transform: translateY(7px) scaleY(0.5); opacity: 0; }
+      100% { transform: translateY(0) scaleY(1); opacity: 1; }
+    }
+    /* Press feedback: anticipation, squash, follow-through */
+    #generateBtn.go { animation: gen-press 380ms var(--e-spring); }
+    @keyframes gen-press {
+      0%   { transform: scale(0.97);         box-shadow: 0 6px 14px rgba(109, 40, 217, 0.28); }
+      25%  { transform: scale(1.04, 0.95);   box-shadow: 0 3px 7px rgba(109, 40, 217, 0.18); }
+      55%  { transform: scale(0.99, 1.01);   box-shadow: 0 12px 26px rgba(109, 40, 217, 0.36); }
+      100% { transform: scale(1);            box-shadow: 0 8px 18px rgba(109, 40, 217, 0.30); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #generateBtn.go, #generateBtn .gen-icon * { animation: none !important; }
+    }
+
+    /* Message box */
+    .msg-box { padding: 8px 12px; border-radius: 8px; font-size: 11px; line-height: 1.5; display: none; }
+    .msg-box.show { display: block; }
+    .msg-box.error   { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+    .msg-box.info    { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+    .msg-box.success { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+
+    /* Queue panel */
+    .queue-content {
+      flex: 1; overflow-y: auto; padding: 12px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .queue-content::-webkit-scrollbar { width: 5px; }
+    .queue-content::-webkit-scrollbar-track { background: #f1f5f9; }
+    .queue-content::-webkit-scrollbar-thumb { background: #8b5cf6; border-radius: 3px; }
+    .queue-empty {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      color: #9ca3af; gap: 8px; padding: 40px 20px; text-align: center;
+    }
+    /* Animated headphones for the empty queue */
+    .queue-empty-icon { width: 64px; height: auto; overflow: visible; color: #a78bfa; }
+    .queue-empty-icon .draw {
+      stroke-dasharray: 120;
+      stroke-dashoffset: 120;
+      animation: svg-draw 0.9s var(--e-emphasized) forwards;
+    }
+    .empty-float { transform-box: fill-box; transform-origin: center; animation: empty-float 5s ease-in-out infinite; }
+    .empty-glow { transform-box: fill-box; transform-origin: center; animation: empty-glow 5s ease-in-out infinite; }
+    .queue-empty-icon .empty-dot {
+      transform-box: fill-box;
+      transform-origin: center;
+      opacity: 0;
+      animation: empty-dot-in 0.45s var(--e-spring) forwards;
+    }
+    .queue-empty-icon .empty-dot.d1 { animation-delay: 0.55s; }
+    .queue-empty-icon .empty-dot.d2 { animation-delay: 0.68s; }
+    .queue-empty-icon .empty-dot.d3 { animation-delay: 0.81s; }
+    .queue-empty-icon .empty-spark { transform-box: fill-box; transform-origin: center; animation: twinkle 2.4s ease-in-out infinite; }
+    .queue-empty-icon .empty-spark.s2 { animation-delay: 0.9s; }
+    @keyframes empty-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+    @keyframes empty-glow { 0%, 100% { opacity: 0.45; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.06); } }
+    @keyframes empty-dot-in {
+      0% { opacity: 0; transform: scale(0); }
+      60% { opacity: 1; transform: scale(1.25); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    @keyframes twinkle { 0%, 100% { opacity: 0.25; transform: scale(0.7); } 50% { opacity: 1; transform: scale(1.3); } }
+    .queue-empty-text { font-size: 13px; line-height: 1.6; }
+    .queue-empty-cta {
+      margin-top: 6px; padding: 9px 18px; border: none; border-radius: 9px; cursor: pointer;
+      background: linear-gradient(135deg, #6d28d9, #8b5cf6); color: #fff;
+      font-size: 12px; font-weight: 700; font-family: inherit;
+      transition: transform var(--d-quick) var(--e-standard), box-shadow var(--d-std) var(--e-standard);
+    }
+    .queue-empty-cta:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(109, 40, 217, 0.34); }
+    .queue-empty-cta:active { transform: translateY(0) scale(0.97); }
+
+    /* Task card */
+    .task-card {
+      position: relative; background: white; border: 1.5px solid #e5e7eb;
+      border-radius: 12px; padding: 10px 12px;
+      display: flex; flex-direction: column; gap: 6px;
+      transition: border-color var(--d-std) var(--e-standard), box-shadow var(--d-std) var(--e-standard);
+    }
+    .task-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.07); }
+    /* The running task is the "current" card: same violet glow as the current step */
+    .task-card.generating { border-color: #c4b5fd; box-shadow: 0 2px 10px rgba(109, 40, 217, 0.10); }
+    .task-card.done       { border-color: #a7f3d0; }
+    .task-card.error      { border-color: #fca5a5; }
+    .task-card.stopped    { border-color: #fde68a; }
+    /* Connector down to the next task; fills green once this one is done */
+    .task-card:not(:last-child)::after {
+      content: ""; position: absolute; left: 47px; top: calc(100% + 1.5px);
+      width: 2px; height: 16px; background: #e5e7eb; border-radius: 1px;
+    }
+    .task-card.done:not(:last-child)::after {
+      background: #10b981; transform-origin: top; animation: link-grow 0.4s var(--e-emphasized);
+    }
+    /* Indeterminate progress while generating (the backend reports no percentage) */
+    .task-progress {
+      position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+      overflow: hidden; border-radius: 0 0 11px 11px; background: #f5f3ff;
+    }
+    .task-progress > span {
+      display: block; height: 100%; width: 35%; border-radius: 2px;
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+      animation: status-slide 1.4s ease-in-out infinite;
+    }
+    .task-card.dragging   { opacity: 0.4; }
+    .task-card.drag-over-top    { border-top: 2px solid #6d28d9 !important; }
+    .task-card.drag-over-bottom { border-bottom: 2px solid #6d28d9 !important; }
+    .task-header { display: flex; align-items: center; gap: 6px; }
+    .task-drag-handle {
+      color: #d1d5db; cursor: grab; flex-shrink: 0;
+      user-select: none; padding: 0 2px; line-height: 1; display: inline-flex;
+      transition: color var(--d-quick) var(--e-standard);
+    }
+    .task-drag-handle .hb-icon { width: 15px; height: 15px; display: block; }
+    .task-drag-handle:active { cursor: grabbing; }
+    .task-card.sortable:hover .task-drag-handle { color: #9ca3af; }
+    /* Status circle: the task number, colored by state (gray waiting, violet running,
+       green done, red failed, amber stopped) like the step numbers in Setup */
+    .task-state {
+      position: relative; width: 22px; height: 22px; flex-shrink: 0; border-radius: 50%;
+      border: 2px solid #d1d5db; color: #9ca3af; background: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; line-height: 1;
+      transition: background var(--d-std) var(--e-standard), border-color var(--d-std) var(--e-standard),
+                  color var(--d-std) var(--e-standard), transform var(--d-std) var(--e-spring);
+    }
+    .ts-n { font-variant-numeric: tabular-nums; }
+    .ts-ring {
+      position: absolute; inset: -5px; width: calc(100% + 10px); height: calc(100% + 10px);
+      opacity: 0; pointer-events: none;
+    }
+    .ts-ring circle { stroke: #a78bfa; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 22 62; fill: none; }
+    @keyframes ts-spin { to { transform: rotate(360deg); } }
+    .task-card.generating .task-state { background: #6d28d9; border-color: #6d28d9; color: #fff; }
+    .task-card.generating .ts-ring { opacity: 1; animation: ts-spin 0.9s linear infinite; }
+    .task-card.done .task-state { background: #10b981; border-color: #10b981; color: #fff; transform: scale(1.06); }
+    .task-card.error .task-state { background: #ef4444; border-color: #ef4444; color: #fff; }
+    .task-card.stopped .task-state { background: #f59e0b; border-color: #f59e0b; color: #fff; }
+    .task-filename {
+      font-size: 12px; color: #1f2937; font-weight: 700;
+      flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .task-lang-tag {
+      font-size: 10px; background: #ede9fe; color: #6d28d9;
+      border-radius: 6px; padding: 1px 6px; font-weight: 600; flex-shrink: 0;
+    }
+    .task-elapsed {
+      font-size: 10px; color: #a78bfa; font-family: monospace;
+      flex-shrink: 0; letter-spacing: 0.03em;
+    }
+    /* Icon buttons: same shape and hover lift as the profile buttons in Setup */
+    .task-remove-btn, .task-stop-btn {
+      width: 26px; height: 24px; padding: 0; flex-shrink: 0; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: #fff; border: 1.5px solid #e2e8f0; border-radius: 7px; color: #64748b;
+      transition: background var(--d-quick) var(--e-standard), border-color var(--d-quick) var(--e-standard),
+                  color var(--d-quick) var(--e-standard), transform var(--d-quick) var(--e-standard);
+    }
+    .task-remove-btn { background: none; border-color: transparent; color: #9ca3af; }
+    .task-remove-btn:hover, .task-stop-btn:hover { transform: translateY(-1px); }
+    .task-remove-btn:active, .task-stop-btn:active { transform: translateY(0) scale(0.96); }
+    .task-remove-btn .hb-icon, .task-stop-btn .hb-icon { width: 12px; height: 12px; display: block; transition: transform var(--d-std) var(--e-spring); }
+    .task-remove-btn:hover { background: #fee2e2; border-color: #fca5a5; color: #dc2626; }
+    .task-remove-btn:hover .hb-icon { transform: rotate(90deg); }
+    .task-stop-btn { border-color: #c4b5fd; color: #6d28d9; }
+    .task-stop-btn:hover { background: #ede9fe; border-color: #a5b4fc; }
+    .task-stop-btn:not(.reload):hover .hb-icon { transform: scale(0.82); }
+    .task-stop-btn.reload { border-color: #a7f3d0; color: #065f46; }
+    .task-stop-btn.reload:hover { background: #d1fae5; border-color: #6ee7b7; }
+    .task-stop-btn.reload:hover .hb-icon { transform: rotate(-90deg); }
+    /* Task text: 3 lines when collapsed (12px x 1.5 line-height), full text when expanded */
+    .task-text-clip {
+      position: relative; max-height: 54px; overflow: hidden;
+      transition: max-height var(--d-std) var(--e-standard);
+    }
+    .task-text-clip.clamped:not(.expanded)::after {
+      content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 22px;
+      background: linear-gradient(to bottom, rgba(255, 255, 255, 0), #fff);
+      pointer-events: none;
+    }
+    .task-text {
+      font-size: 12px; color: #6b7280; line-height: 1.5;
+      white-space: pre-wrap; word-break: break-word;
+      user-select: text; cursor: text;
+    }
+    /* Copy / expand: icon buttons that fade in while the pointer is over the text */
+    .task-text-box { position: relative; }
+    .task-copy-btn, .task-expand-btn {
+      position: absolute; right: 0; width: 24px; height: 24px; padding: 4px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;
+      color: #9ca3af; cursor: pointer; opacity: 0; transform: translateY(-2px);
+      transition: opacity var(--d-quick) var(--e-standard), transform var(--d-quick) var(--e-standard),
+                  color var(--d-quick) var(--e-standard), background var(--d-quick) var(--e-standard),
+                  border-color var(--d-quick) var(--e-standard);
+    }
+    .task-text-box .task-copy-btn { top: 0; }
+    .task-expand-btn { bottom: 0; transform: translateY(2px); }
+    .task-error-row { position: relative; }
+    .task-error-row .task-copy-btn { top: -2px; }
+    .task-text-box:hover .task-copy-btn, .task-error-row:hover .task-copy-btn,
+    .task-text-box:hover .task-expand-btn,
+    .task-copy-btn:focus-visible, .task-expand-btn:focus-visible,
+    .task-copy-btn.copied { opacity: 1; transform: translateY(0); }
+    .task-copy-btn:hover, .task-expand-btn:hover { color: #6d28d9; background: #f5f3ff; border-color: #ddd6fe; }
+    .task-copy-btn svg, .task-expand-btn svg { width: 100%; height: 100%; display: block; }
+    .task-expand-btn[hidden] { display: none; }
+    .task-expand-btn .hb-icon { transition: transform var(--d-std) var(--e-spring); }
+    .task-expand-btn.open .hb-icon { transform: rotate(180deg); }
+    .task-copy-btn .ic-copy { transition: opacity var(--d-quick) var(--e-standard); }
+    .task-copy-btn .ic-check { stroke: #059669; stroke-dasharray: 24; stroke-dashoffset: 24; }
+    .task-copy-btn.copied, .task-copy-btn.copied:hover { color: #059669; background: #ecfdf5; border-color: #a7f3d0; }
+    .task-copy-btn.copied .ic-copy { opacity: 0; }
+    .task-copy-btn.copied .ic-check { animation: copy-check var(--d-std) var(--e-emphasized) forwards; }
+    @keyframes copy-check { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
+    .task-error-msg { font-size: 11px; color: #b91c1c; word-break: break-word; user-select: text; }
+    .task-audio { display: none; }
+    .task-audio.show { display: block; }
+    .task-audio audio { width: 100%; height: 32px; border-radius: 6px; }
+  
+    /* ── Video Translator Remote additions ───────────────────────────────── */
+    .port-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 0 12px 8px; }
+    .port-grid label { display: flex; flex-direction: column; gap: 2px; font-size: 10px; font-weight: 600; color: #475569; }
+    .port-grid input { width: 100%; min-width: 0; padding: 4px 6px; }
+    .svc-dots { display: inline-flex; gap: 3px; margin-left: 4px; }
+    .svc-dots i { width: 6px; height: 6px; border-radius: 50%; background: #cbd5e1; }
+    .svc-dots i.on { background: #10b981; }
+    .svc-dots i.load { background: #f59e0b; }
+
+    .file-meta { font-size: 11px; color: #475569; min-height: 0; }
+    .file-meta:empty { display: none; }
+    .lang-pair { display: flex; align-items: flex-end; gap: 6px; }
+    .lang-pair .lang-row { flex: 1; flex-direction: column; align-items: stretch; gap: 3px; margin: 0; min-width: 0; }
+    .lang-pair .lang-row select { width: 100%; }
+    .lang-arrow { color: #8b5cf6; font-weight: 700; padding-bottom: 7px; }
+    .file-drop-zone.compact { padding: 10px 8px; }
+
+    .check-row, .radio-row { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; color: #374151; line-height: 1.45; cursor: pointer; }
+    .check-row input, .radio-row input { margin-top: 2px; accent-color: #6d28d9; flex-shrink: 0; }
+    #glossaryTextarea { min-height: 62px; max-height: 140px; }
+    #refTextarea { min-height: 70px; max-height: 160px; }
+    #refSegBox { display: flex; flex-direction: column; gap: 6px; }
+    #refSegBox select { width: 100%; }
+    #refSegBox audio, #refUploadBox audio { width: 100%; height: 32px; border-radius: 6px; }
+    #refUploadBox { display: flex; flex-direction: column; gap: 6px; }
+    #refUploadBox[hidden], #refSegBox[hidden], audio[hidden], video[hidden] { display: none; }
+
+    /* action buttons: same look as the old Generate button, one per step */
+    .act-row { display: flex; gap: 8px; }
+    .act-btn {
+      position: relative; flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 10px 14px; border: none; border-radius: 10px; cursor: pointer; overflow: hidden;
+      font-size: 13px; font-weight: 700; color: #fff;
+      background: linear-gradient(135deg, #3b82f6, #7c3aed);
+      transition: transform var(--d-std) var(--e-standard), box-shadow var(--d-std) var(--e-standard), opacity var(--d-std);
+    }
+    .act-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(109, 40, 217, 0.34); }
+    .act-btn:active:not(:disabled) { transform: translateY(0) scale(0.97); }
+    .act-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .act-btn .gen-icon { width: 18px; height: 18px; flex-shrink: 0; overflow: visible; }
+    .act-btn .gen-icon .bar { transform-box: fill-box; transform-origin: center; }
+    .act-btn:hover:not(:disabled) .gen-icon .bar { animation: eq-bounce 0.9s ease-in-out infinite; }
+    .act-btn:hover:not(:disabled) .gen-icon .b2 { animation-delay: 0.12s; }
+    .act-btn:hover:not(:disabled) .gen-icon .b3 { animation-delay: 0.24s; }
+    .act-btn:hover:not(:disabled) .gen-icon .b4 { animation-delay: 0.08s; }
+    .act-btn:hover:not(:disabled) .gen-icon .b5 { animation-delay: 0.2s; }
+    .act-btn.again { background: #fff; color: #6d28d9; border: 1.5px solid #c4b5fd; }
+    .act-btn.again:hover:not(:disabled) { background: #f5f3ff; box-shadow: none; }
+    .act-stop {
+      padding: 0 14px; border-radius: 10px; cursor: pointer; font-size: 12px; font-weight: 700;
+      background: #fff; color: #b91c1c; border: 1.5px solid #fecaca;
+    }
+    .act-stop:hover { background: #fef2f2; }
+    .act-stop[hidden] { display: none; }
+
+    .step-progress { display: none; flex-direction: column; gap: 4px; }
+    .step-progress.show { display: flex; }
+    .step-progress-bar { height: 6px; border-radius: 3px; background: #ede9fe; overflow: hidden; }
+    .step-progress-bar > span { display: block; height: 100%; width: 0; border-radius: 3px; background: linear-gradient(90deg, #3b82f6, #8b5cf6); transition: width var(--d-std) var(--e-standard); }
+    .step-progress.indeterminate .step-progress-bar > span { width: 35%; animation: status-slide 1.4s ease-in-out infinite; }
+    .step-progress-text { font-size: 11px; color: #6d28d9; font-variant-numeric: tabular-nums; }
+
+    /* segment editor */
+    .seg-head { font-size: 11px; color: #6b7280; }
+    .seg-list { display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow-y: auto; padding-right: 2px; }
+    .seg-list:empty { display: none; }
+    .seg-list::-webkit-scrollbar { width: 5px; }
+    .seg-list::-webkit-scrollbar-thumb { background: #c4b5fd; border-radius: 3px; }
+    .seg-row { border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; background: #fafafa; }
+    .seg-row.dubbed { border-color: #a7f3d0; background: #f0fdf4; }
+    .seg-time { font-size: 10px; color: #7c3aed; font-family: monospace; display: flex; align-items: center; gap: 6px; }
+    .seg-time .seg-no { background: #ede9fe; border-radius: 6px; padding: 0 5px; font-weight: 700; }
+    .seg-time .seg-play { margin-left: auto; border: none; background: none; color: #7c3aed; cursor: pointer; font-size: 11px; padding: 0 2px; }
+    .seg-row textarea { min-height: 38px; max-height: 120px; font-size: 12px; padding: 5px 7px; resize: vertical; }
+    .seg-row textarea.src { color: #475569; background: #fff; }
+    .seg-row textarea.tgt { border-color: #ddd6fe; }
+
+    .result-box { display: flex; flex-direction: column; gap: 8px; }
+    .result-box video { width: 100%; border-radius: 8px; background: #000; max-height: 260px; }
+    .result-box audio { width: 100%; height: 32px; }
+    .result-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .result-actions button {
+      flex: 1 1 auto; padding: 7px 10px; border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: 700;
+      background: #fff; color: #6d28d9; border: 1.5px solid #c4b5fd;
+    }
+    .result-actions button:hover { background: #f5f3ff; }
+    .result-actions button.primary { background: #6d28d9; color: #fff; border-color: #6d28d9; }
+    .result-actions button.primary:hover { background: #5b21b6; }
+
+    /* history cards */
+    .task-sub { font-size: 11px; color: #6b7280; display: flex; gap: 8px; flex-wrap: wrap; }
+    .task-sub b { color: #374151; font-weight: 600; }
+    .task-card.current-project { border-color: #c4b5fd; }
+    .task-open-btn {
+      width: auto; padding: 0 9px; height: 24px; flex-shrink: 0; cursor: pointer; font-size: 11px; font-weight: 700;
+      background: #fff; border: 1.5px solid #c4b5fd; border-radius: 7px; color: #6d28d9;
+    }
+    .task-open-btn:hover { background: #ede9fe; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header-bar">
+  <div class="header-title">
+    <svg class="brand-mark" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="vmg" x1="4" y1="4" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#ffffff"/><stop offset="1" stop-color="#e9d5ff"/>
+        </linearGradient>
+      </defs>
+      <rect class="draw" x="3" y="8" width="16" height="13" rx="3" stroke="#ffffff" stroke-width="1.8" style="animation-delay:0s"/>
+      <path class="draw" d="M9.5 12v5l4.2-2.5z" stroke="url(#vmg)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="animation-delay:.2s"/>
+      <path class="draw" d="M19 13l5-3v9l-5-3" stroke="url(#vmg)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="animation-delay:.36s"/>
+      <path class="bm-wave w1" d="M21.6 5.4a4 4 0 0 1 3.2 1.4" stroke="#e9d5ff" stroke-width="1.6" stroke-linecap="round"/>
+      <path class="bm-wave w2" d="M21 2.6a7 7 0 0 1 5.8 3" stroke="#e9d5ff" stroke-width="1.6" stroke-linecap="round"/>
+      <circle class="bm-halo" cx="4.2" cy="4.6" r="1.4" stroke="#ffffff" stroke-width="1" fill="none"/>
+      <circle class="bm-node" cx="4.2" cy="4.6" r="1.4" fill="#ffffff"/>
+    </svg>
+    <span>Video Translator Remote</span>
+    <span class="app-version" id="extensionVersion"></span>
+  </div>
+  <div class="header-right">
+    <select class="language-selector" id="langSelect">
+      <option value="zh-TW">繁</option>
+      <option value="zh-CN">简</option>
+      <option value="en">En</option>
+    </select>
+    <button class="icon-btn panel-btn" id="panelModeBtn" title="切換顯示模式"></button>
+  </div>
+</div>
+
+<!-- Update banner -->
+<aside class="update-banner" id="updateBanner" role="status" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+  <span class="update-message" id="updateMessage"></span>
+  <button class="update-btn" id="updateActionBtn" type="button" data-i18n="update-download">下載更新</button>
+  <button class="update-dismiss" id="updateDismissBtn" type="button" data-i18n-title="update-dismiss" title="忽略此版本" aria-label="忽略此版本">×</button>
+</aside>
+
+<!-- Status bar -->
+<div class="status-bar" id="statusBar">
+  <div class="status-bar-row">
+    <div class="status-dot offline" id="statusDot"></div>
+    <span id="statusText" data-i18n="status-checking">Checking…</span><span class="svc-dots" id="svcDots"><i></i><i></i><i></i><i></i></span>
+    <div class="status-actions">
+    <button class="start-btn" id="startBackendBtn" style="display:none"><svg class="hb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" stroke-width="2.4"><path d="M3 12a9 9 0 1 0 2.6-6.4"/><path d="M3 4v5h5"/></svg><span data-i18n="retry-backend">Retry</span></button>
+    <button class="status-gear" id="serverGearBtn" data-i18n-title="server-settings" title="Server settings" aria-expanded="false">
+      <svg class="hb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+    </div>
+  </div>
+  <div class="server-pop" id="serverPop">
+    <div>
+      <div class="lang-row">
+        <label data-i18n="label-server">B70</label>
+        <input type="text" id="hostInput" spellcheck="false" placeholder="<server-ip>">
+      </div>
+      <div class="port-grid">
+        <label><span data-i18n="svc-asr">辨識</span><input type="text" id="portAsr" inputmode="numeric" spellcheck="false"></label>
+        <label><span data-i18n="svc-llm">翻譯</span><input type="text" id="portLlm" inputmode="numeric" spellcheck="false"></label>
+        <label><span data-i18n="svc-tts">配音</span><input type="text" id="portTts" inputmode="numeric" spellcheck="false"></label>
+        <label><span data-i18n="svc-vt">影片</span><input type="text" id="portVt" inputmode="numeric" spellcheck="false"></label>
+      </div>
+    </div>
+  </div>
+  <div class="status-progress">
+    <div class="status-progress-bar"></div>
+  </div>
+</div>
+
+<!-- Tab bar -->
+<div class="tab-bar">
+  <button class="tab-btn active" id="tabSetup" data-i18n="tab-setup">流程</button>
+  <button class="tab-btn" id="tabQueue">
+    <span data-i18n="tab-queue">歷史</span><span class="tab-badge hidden" id="queueBadge">0</span>
+  </button>
+</div>
+
+<!-- Setup panel -->
+<div class="panel" id="panelSetup">
+  <div class="content">
+    <div class="steps">
+
+    <!-- Step 1: video + languages -->
+    <section class="step-card current collapsible" id="step1">
+      <div class="step-head" id="step1Head">
+        <span class="step-num"><span class="step-n">1</span><svg class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+        <span class="step-title" data-i18n="step1-title">選擇影片與語言</span>
+        <span class="step-summary" id="step1Summary"></span>
+        <span class="step-toggle"><svg class="hb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
+      </div>
+      <div class="step-body"><div><div class="step-body-inner">
+        <div class="file-drop-zone" id="videoDropZone">
+          <input type="file" id="videoFileInput" accept="video/*,audio/*,.mp4,.mkv,.mov,.webm,.avi,.m4a,.mp3,.wav,.flac,.ogg">
+          <button class="file-drop-zone-remove" id="videoRemoveBtn" title="Remove"><svg class="hb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          <svg class="file-drop-zone-icon" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect class="draw" x="3" y="7" width="16" height="14" rx="3"/>
+            <path class="draw" d="M9.5 11.5v5l4.2-2.5z" style="animation-delay:.2s"/>
+            <path class="draw" d="M19 12.5l5-3v9l-5-3" style="animation-delay:.36s"/>
+            <path class="dz-wave w1" d="M22 4.2a3.4 3.4 0 0 1 3 2" stroke-width="1.6"/>
+            <path class="dz-wave w2" d="M21.4 1.6a6.8 6.8 0 0 1 5.6 3.6" stroke-width="1.6"/>
+          </svg>
+          <div class="file-drop-zone-label" data-i18n="drop-label">拖曳影片到這裡</div>
+          <div class="file-drop-zone-hint" data-i18n="drop-hint">或點擊選擇檔案（mp4 / mkv / mov / webm / 音訊）</div>
+          <div class="file-drop-zone-filename" id="videoFileName"></div>
+        </div>
+        <div class="file-meta" id="videoMeta"></div>
+        <div class="lang-pair">
+          <div class="lang-row">
+            <label data-i18n="label-src">原語言</label>
+            <select id="srcLangSelect"></select>
+          </div>
+          <span class="lang-arrow" aria-hidden="true">→</span>
+          <div class="lang-row">
+            <label data-i18n="label-tgt">翻譯成</label>
+            <select id="tgtLangSelect"></select>
+          </div>
+        </div>
+        <div class="field-hint" data-i18n="step1-hint">影片會在下一步上傳到 B70 處理，不會經過其他伺服器。</div>
+      </div></div></div>
+    </section>
+
+    <!-- Step 2: speech to text -->
+    <section class="step-card collapsible" id="step2">
+      <div class="step-head" id="step2Head">
+        <span class="step-num"><span class="step-n">2</span><svg class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+        <span class="step-title" data-i18n="step2-title">語音辨識</span>
+        <span class="step-summary" id="step2Summary"></span>
+        <span class="step-toggle"><svg class="hb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
+      </div>
+      <div class="step-body"><div><div class="step-body-inner">
+        <div class="field-hint" data-i18n="step2-hint">依靜音把語音切成句子，再逐句辨識，這樣每句字幕都有時間點。</div>
+        <div class="step-missing" id="missing2">
+          <svg class="hb-icon ic-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.01"/></svg>
+          <svg class="hb-icon ic-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+          <span id="missing2Text"></span>
+        </div>
+        <div class="step-progress" id="progress2"><div class="step-progress-bar"><span></span></div><div class="step-progress-text"></div></div>
+        <div class="msg-box" id="msg2"></div>
+        <div class="act-row">
+          <button class="act-btn" id="asrBtn" disabled><span class="act-label" data-i18n="btn-asr">開始辨識</span></button>
+          <button class="act-stop" id="stop2" hidden data-i18n="btn-stop">停止</button>
+        </div>
+      </div></div></div>
+    </section>
+
+    <!-- Step 3: correct + translate -->
+    <section class="step-card collapsible" id="step3">
+      <div class="step-head" id="step3Head">
+        <span class="step-num"><span class="step-n">3</span><svg class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+        <span class="step-title" data-i18n="step3-title">校正與翻譯</span>
+        <span class="step-summary" id="step3Summary"></span>
+        <span class="step-toggle"><svg class="hb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
+      </div>
+      <div class="step-body"><div><div class="step-body-inner">
+        <label class="check-row"><input type="checkbox" id="optClean" checked><span data-i18n="opt-clean">先校正辨識錯誤並去除贅字（嗯、啊、那個…）</span></label>
+        <div class="field-hint" data-i18n="glossary-hint">專有名詞表（選填）：一行一個，可寫成「原文=譯文」，LLM 會照著用。</div>
+        <textarea id="glossaryTextarea" data-i18n-placeholder="glossary-placeholder" placeholder="Lunar Lake&#10;Xe2=Xe2&#10;顯示卡=graphics card"></textarea>
+        <div class="seg-head" id="segHead3" hidden>
+          <span data-i18n="seg-edit-hint">可直接修改原文與譯文，翻譯後的內容會用在字幕與配音。</span>
+        </div>
+        <div class="seg-list" id="segList"></div>
+        <div class="step-missing" id="missing3">
+          <svg class="hb-icon ic-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.01"/></svg>
+          <svg class="hb-icon ic-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+          <span id="missing3Text"></span>
+        </div>
+        <div class="step-progress" id="progress3"><div class="step-progress-bar"><span></span></div><div class="step-progress-text"></div></div>
+        <div class="msg-box" id="msg3"></div>
+        <div class="act-row">
+          <button class="act-btn" id="translateBtn" disabled><span class="act-label" data-i18n="btn-translate">開始翻譯</span></button>
+          <button class="act-stop" id="stop3" hidden data-i18n="btn-stop">停止</button>
+        </div>
+      </div></div></div>
+    </section>
+
+    <!-- Step 4: dubbing -->
+    <section class="step-card collapsible" id="step4">
+      <div class="step-head" id="step4Head">
+        <span class="step-num"><span class="step-n">4</span><svg class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+        <span class="step-title" data-i18n="step4-title">配音</span>
+        <span class="step-summary" id="step4Summary"></span>
+        <span class="step-toggle"><svg class="hb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
+      </div>
+      <div class="step-body"><div><div class="step-body-inner">
+        <div class="field-hint" data-i18n="step4-hint">選一段聲音當參考，Qwen3-TTS 會用這個聲音唸出譯文。</div>
+        <label class="radio-row"><input type="radio" name="refMode" value="segment" checked><span data-i18n="ref-from-video">用影片裡的聲音當參考（保留原講者的聲音）</span></label>
+        <div id="refSegBox">
+          <select id="refSegSelect"></select>
+          <audio id="refSegPlayer" controls></audio>
+        </div>
+        <label class="radio-row"><input type="radio" name="refMode" value="upload"><span data-i18n="ref-from-upload">上傳參考聲音（.wav）</span></label>
+        <div id="refUploadBox" hidden>
+          <div class="file-drop-zone compact" id="refDropZone">
+            <input type="file" id="refFileInput" accept=".wav,audio/wav">
+            <button class="file-drop-zone-remove" id="refRemoveBtn" title="Remove"><svg class="hb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+            <div class="file-drop-zone-label" data-i18n="ref-drop-label">拖曳或點擊選擇 .wav</div>
+            <div class="file-drop-zone-filename" id="refFileName"></div>
+          </div>
+          <audio id="refUploadPlayer" controls hidden></audio>
+        </div>
+        <div class="field-hint" data-i18n="ref-text-hint">參考聲音實際說的內容：</div>
+        <textarea id="refTextarea" data-i18n-placeholder="ref-text-placeholder" placeholder="The exact words spoken in the reference audio"></textarea>
+        <div class="step-missing" id="missing4">
+          <svg class="hb-icon ic-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.01"/></svg>
+          <svg class="hb-icon ic-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+          <span id="missing4Text"></span>
+        </div>
+        <div class="step-progress" id="progress4"><div class="step-progress-bar"><span></span></div><div class="step-progress-text"></div></div>
+        <div class="msg-box" id="msg4"></div>
+        <div class="act-row">
+          <button class="act-btn" id="dubBtn" disabled>
+            <svg class="gen-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path class="bar b1" d="M4 10v4"/><path class="bar b2" d="M8 7v10"/><path class="bar b3" d="M12 4v16"/><path class="bar b4" d="M16 8v8"/><path class="bar b5" d="M20 11v2"/>
+            </svg>
+            <span class="act-label" data-i18n="btn-dub">合成配音</span>
+          </button>
+          <button class="act-stop" id="stop4" hidden data-i18n="btn-stop">停止</button>
+        </div>
+      </div></div></div>
+    </section>
+
+    <!-- Step 5: render -->
+    <section class="step-card collapsible" id="step5">
+      <div class="step-head" id="step5Head">
+        <span class="step-num"><span class="step-n">5</span><svg class="step-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+        <span class="step-title" data-i18n="step5-title">輸出影片</span>
+        <span class="step-summary" id="step5Summary"></span>
+        <span class="step-toggle"><svg class="hb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
+      </div>
+      <div class="step-body"><div><div class="step-body-inner">
+        <label class="check-row"><input type="checkbox" id="optBurn" checked><span data-i18n="opt-burn">把字幕燒進畫面（重新編碼，較慢）</span></label>
+        <div class="lang-row">
+          <label data-i18n="label-origvol">原音</label>
+          <select id="origVolSelect">
+            <option value="0" data-i18n="vol-mute">靜音</option>
+            <option value="0.1">10%</option>
+            <option value="0.25">25%</option>
+          </select>
+        </div>
+        <div class="lang-row">
+          <label data-i18n="label-speed">語速上限</label>
+          <select id="speedSelect">
+            <option value="1" data-i18n="speed-off">不加速</option>
+            <option value="1.25">1.25×</option>
+            <option value="1.5" selected>1.5×</option>
+            <option value="2">2×</option>
+          </select>
+        </div>
+        <div class="field-hint" data-i18n="speed-hint">配音比原句長時，會自動加快語速來對齊（最多到上限）。</div>
+        <div class="step-missing" id="missing5">
+          <svg class="hb-icon ic-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.01"/></svg>
+          <svg class="hb-icon ic-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+          <span id="missing5Text"></span>
+        </div>
+        <div class="step-progress" id="progress5"><div class="step-progress-bar"><span></span></div><div class="step-progress-text"></div></div>
+        <div class="msg-box" id="msg5"></div>
+        <div class="act-row">
+          <button class="act-btn" id="renderBtn" disabled><span class="act-label" data-i18n="btn-render">合成影片</span></button>
+        </div>
+        <div class="result-box" id="resultBox" hidden>
+          <video id="resultVideo" controls preload="metadata"></video>
+          <audio id="resultAudio" controls hidden></audio>
+          <div class="result-actions" id="resultActions"></div>
+        </div>
+      </div></div></div>
+    </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- History panel -->
+<div class="panel hidden" id="panelQueue">
+  <div class="queue-content" id="queueContent">
+    <div class="queue-empty" id="queueEmpty">
+      <svg class="queue-empty-icon" viewBox="0 0 96 80" fill="none" aria-hidden="true">
+        <ellipse class="empty-glow" cx="48" cy="44" rx="34" ry="28" fill="#ede9fe"/>
+        <g class="empty-float">
+          <rect class="draw" x="18" y="22" width="48" height="36" rx="7" stroke="currentColor" stroke-width="3"/>
+          <path class="draw" d="M66 36l14-8v24l-14-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="animation-delay:.25s"/>
+          <circle class="empty-dot d1" cx="34" cy="40" r="2.6" fill="#8b5cf6"/>
+          <circle class="empty-dot d2" cx="42" cy="40" r="2.6" fill="#8b5cf6"/>
+          <circle class="empty-dot d3" cx="50" cy="40" r="2.6" fill="#8b5cf6"/>
+        </g>
+        <path class="empty-spark s1" d="M82 14l1.6 3.4L87 19l-3.4 1.6L82 24l-1.6-3.4L77 19l3.4-1.6Z" fill="#c4b5fd"/>
+        <path class="empty-spark s2" d="M14 20l1.2 2.4 2.4 1.2-2.4 1.2L14 27.2l-1.2-2.4-2.4-1.2 2.4-1.2Z" fill="#c4b5fd"/>
+      </svg>
+      <div class="queue-empty-text" data-i18n="queue-empty">還沒有翻譯過的影片。到「流程」頁選一支影片開始吧。</div>
+      <button class="queue-empty-cta" id="queueEmptyCta" type="button" data-i18n="queue-go-setup">前往流程</button>
+    </div>
+  </div>
+</div>
+
+<script src="sidepanel.js"></script>
+</body>
+</html>
