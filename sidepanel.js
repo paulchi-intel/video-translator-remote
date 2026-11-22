@@ -48,6 +48,11 @@ const ttsLang = (code) => (code === 'zh-TW' || code === 'zh-CN' ? 'zh' : code);
 // ── i18n translations ────────────────────────────────────────────────────────
 const TRANSLATIONS = {
   en: {
+    'btn-auto': 'Translate automatically', 'btn-auto-resume': 'Continue automatically',
+    'opt-pause': 'Pause after translating so I can check the translation',
+    'auto-hint': 'Runs every remaining step with the settings shown here and the defaults.',
+    'auto-running': 'Auto {n}/4: {name}', 'auto-paused': 'Paused — check the translation, then press “Continue automatically” (or Dub).',
+    's-ref': ' · voice #{n}',
     'status-checking': 'Checking B70…',
     'status-ready': 'B70 ready — ASR · LLM · TTS · video',
     'status-loading': 'B70 is still loading a model…',
@@ -122,6 +127,11 @@ const TRANSLATIONS = {
     'play': 'Play',
   },
   'zh-TW': {
+    'btn-auto': '全自動翻譯', 'btn-auto-resume': '繼續全自動',
+    'opt-pause': '翻譯後暫停，讓我先檢查譯文',
+    'auto-hint': '用目前的設定與預設值，把剩下的步驟一路跑完。',
+    'auto-running': '全自動 {n}/4：{name}', 'auto-paused': '已暫停：請檢查譯文，再按「繼續全自動」（或「合成配音」）。',
+    's-ref': ' · 聲音 #{n}',
     'status-checking': '檢查 B70 中…',
     'status-ready': 'B70 就緒 — 辨識 · 翻譯 · 配音 · 影片',
     'status-loading': 'B70 還在載入模型…',
@@ -196,6 +206,11 @@ const TRANSLATIONS = {
     'play': '播放',
   },
   'zh-CN': {
+    'btn-auto': '全自动翻译', 'btn-auto-resume': '继续全自动',
+    'opt-pause': '翻译后暂停，让我先检查译文',
+    'auto-hint': '用当前设置和默认值，把剩下的步骤一路跑完。',
+    'auto-running': '全自动 {n}/4：{name}', 'auto-paused': '已暂停：请检查译文，再点“继续全自动”（或“合成配音”）。',
+    's-ref': ' · 声音 #{n}',
     'status-checking': '检查 B70 中…',
     'status-ready': 'B70 就绪 — 识别 · 翻译 · 配音 · 视频',
     'status-loading': 'B70 还在加载模型…',
@@ -302,7 +317,8 @@ const videoDropZone = $('videoDropZone'), videoFileInput = $('videoFileInput'), 
 const videoRemoveBtn = $('videoRemoveBtn'), videoMeta = $('videoMeta');
 const srcLangSelect = $('srcLangSelect'), tgtLangSelect = $('tgtLangSelect');
 const asrBtn = $('asrBtn'), translateBtn = $('translateBtn'), dubBtn = $('dubBtn'), renderBtn = $('renderBtn');
-const stopBtns = { asr: $('stop2'), translate: $('stop3'), dub: $('stop4') };
+const stopBtns = { asr: $('stop2'), translate: $('stop3'), dub: $('stop4'), render: $('stop5') };
+const autoBtn = $('autoBtn'), optPause = $('optPause');
 const optClean = $('optClean'), glossaryTextarea = $('glossaryTextarea');
 const segList = $('segList'), segHead3 = $('segHead3');
 const optBurn = $('optBurn'), origVolSelect = $('origVolSelect'), speedSelect = $('speedSelect');
@@ -376,7 +392,7 @@ function newProject() {
     srcLang: srcLangSelect.value || 'auto', tgtLang: tgtLangSelect.value || 'en',
     segments: [], asrDone: false, translated: false, dubbed: false, rendered: false, outputs: [],
     refMode: 'segment', refSegIdx: null, refTextSeg: '', refTextUp: '', refAudio: null,
-    glossary: '', optClean: true, burn: true, origVol: '0', speed: '1.5', elapsedMs: 0, error: null,
+    glossary: '', pause: true, optClean: true, burn: true, origVol: '0', speed: '1.5', elapsedMs: 0, error: null,
   };
 }
 
@@ -474,7 +490,9 @@ function renderStatus() {
     statusText.textContent = t('status-no-server');
   } else if (busy) {
     statusDot.classList.add('loading');
-    statusText.textContent = t('status-working');
+    statusText.textContent = autoRunning && autoStepNo
+      ? t('auto-running', { n: autoStepNo - 1, name: t(`step${autoStepNo}-title`) })
+      : t('status-working');
   } else if (notReady.length === 0) {
     statusText.textContent = t('status-ready');
   } else if (notReady.every((n) => svcLoading[n])) {
@@ -603,7 +621,10 @@ function updateSteps() {
   steps[0].summary.textContent = parts1.join(' · ');
   steps[1].summary.textContent = p.asrDone ? t('s-segments', { n: p.segments.length }) : '';
   steps[2].summary.textContent = p.translated ? t('s-segments', { n: countTexts(p, 'tgt') }) : '';
-  steps[3].summary.textContent = p.dubbed ? t('s-dubbed', { n: p.segments.filter((s) => s.clip).length }) : '';
+  const refNo = p.refMode === 'segment' && p.refSegIdx != null ? p.segments.findIndex((s) => s.i === p.refSegIdx) + 1 : 0;
+  steps[3].summary.textContent = p.dubbed
+    ? t('s-dubbed', { n: p.segments.filter((s) => s.clip).length }) + (refNo ? t('s-ref', { n: refNo }) : '')
+    : '';
   steps[4].summary.textContent = p.rendered ? t('s-video') : '';
 
   // missing hints
@@ -643,6 +664,10 @@ function updateSteps() {
   setBtn(translateBtn, 'btn-translate', 'btn-translate-again', p.translated, m3);
   setBtn(dubBtn, 'btn-dub', 'btn-dub-again', p.dubbed, m4);
   setBtn(renderBtn, 'btn-render', 'btn-render-again', p.rendered, m5);
+  const anyDone = p.asrDone || p.translated || p.dubbed;
+  const autoMissing = !st.s1 || !svc.vt || !svc.asr || !svc.llm || !svc.tts || p.rendered;
+  autoBtn.disabled = !!busy || autoRunning || autoMissing;
+  autoBtn.querySelector('.act-label').textContent = t(anyDone ? 'btn-auto-resume' : 'btn-auto');
   updateBadge();
 }
 
@@ -670,7 +695,8 @@ function showMsg(n, text, type = 'error') {
 function hideMsg(n) { const el = steps[n - 1].msg; el.className = 'msg-box'; el.textContent = ''; }
 
 async function runStep(kind, stepNo, fn) {
-  if (busy) return;
+  if (busy) return 'failed';
+  let result = 'ok';
   busy = kind;
   abortCtl = new AbortController();
   const started = Date.now();
@@ -681,8 +707,9 @@ async function runStep(kind, stepNo, fn) {
   try {
     await fn(abortCtl.signal);
   } catch (err) {
-    if (err?.name === 'AbortError' || abortCtl?.signal.aborted) showMsg(stepNo, t('err-stopped'), 'info');
-    else { console.error(err); showMsg(stepNo, err?.message || String(err)); project.error = err?.message || String(err); }
+    if (err?.name === 'AbortError' || abortCtl?.signal.aborted) { result = 'stopped'; showMsg(stepNo, t('err-stopped'), 'info'); }
+    else {
+      result = 'failed'; console.error(err); showMsg(stepNo, err?.message || String(err)); project.error = err?.message || String(err); }
   } finally {
     project.elapsedMs = (project.elapsedMs || 0) + (Date.now() - started);
     busy = null;
@@ -693,8 +720,9 @@ async function runStep(kind, stepNo, fn) {
     flushState();
     renderAll();
   }
+  return result;
 }
-Object.entries(stopBtns).forEach(([, btn]) => btn.addEventListener('click', () => abortCtl?.abort()));
+Object.entries(stopBtns).forEach(([, btn]) => btn.addEventListener('click', () => { autoCancel = true; abortCtl?.abort(); }));
 
 // ── Step 1: pick a video ─────────────────────────────────────────────────────
 videoDropZone.addEventListener('click', (e) => { if (!videoRemoveBtn.contains(e.target)) videoFileInput.click(); });
@@ -860,13 +888,16 @@ function pickDefaultRef(p) {
   return best;
 }
 
-asrBtn.addEventListener('click', async () => {
-  const p = project;
-  if (p.asrDone) {
+asrBtn.addEventListener('click', () => {
+  if (project.asrDone) {
     if (!confirm(t('confirm-redo'))) return;
     invalidateFrom('asr');
   }
-  await runStep('asr', 2, async (signal) => {
+  doAsr();
+});
+function doAsr() {
+  const p = project;
+  return runStep('asr', 2, async (signal) => {
     if (!p.jobId) {
       if (!pendingFile) throw new Error(t('err-job-gone'));
       showProgress(2, 0, t('p-upload', { pct: 0 }));
@@ -905,7 +936,7 @@ asrBtn.addEventListener('click', async () => {
     const ref = pickDefaultRef(p);
     if (ref && p.refSegIdx == null) { p.refSegIdx = ref.i; p.refTextSeg = ref.raw || ref.src || ''; }
   });
-});
+}
 
 // ── Step 3: correct + translate (LLM) ────────────────────────────────────────
 async function refreshLlmModel() {
@@ -981,15 +1012,18 @@ function translateSystem(srcName, tgtName) {
     'an empty line stays an empty string; no notes or explanations.';
 }
 
-translateBtn.addEventListener('click', async () => {
-  const p = project;
-  if (p.translated) {
+translateBtn.addEventListener('click', () => {
+  if (project.translated) {
     if (!confirm(t('confirm-redo'))) return;
     invalidateFrom('translate');
   }
+  doTranslate();
+});
+function doTranslate() {
+  const p = project;
   p.glossary = glossaryTextarea.value;
   p.optClean = optClean.checked;
-  await runStep('translate', 3, async (signal) => {
+  return runStep('translate', 3, async (signal) => {
     const glossary = p.glossary.trim();
     const segs = p.segments;
 
@@ -1032,7 +1066,7 @@ translateBtn.addEventListener('click', async () => {
     segs.filter((s) => !(s.src || '').trim()).forEach((s) => { s.tgt = ''; });
     p.translated = true;
   });
-});
+}
 
 // ── Step 4: dub ──────────────────────────────────────────────────────────────
 function renderRefUi() {
@@ -1098,14 +1132,17 @@ async function loadRefFile(file) {
   renderRefUi(); updateSteps(); saveState();
 }
 
-dubBtn.addEventListener('click', async () => {
-  const p = project;
-  if (p.dubbed) {
+dubBtn.addEventListener('click', () => {
+  if (project.dubbed) {
     if (!confirm(t('confirm-redo'))) return;
     invalidateFrom('dub');
     renderSegList();
   }
-  await runStep('dub', 4, async (signal) => {
+  doDub();
+});
+function doDub() {
+  const p = project;
+  return runStep('dub', 4, async (signal) => {
     let refB64, refText;
     if (p.refMode === 'upload') {
       refB64 = p.refAudio.base64;
@@ -1133,7 +1170,7 @@ dubBtn.addEventListener('click', async () => {
     }
     p.dubbed = true;
   });
-});
+}
 
 // ── Step 5: render ───────────────────────────────────────────────────────────
 [optClean, optBurn].forEach((el) => el.addEventListener('change', () => { project.optClean = optClean.checked; project.burn = optBurn.checked; saveState(); }));
@@ -1141,19 +1178,24 @@ glossaryTextarea.addEventListener('input', () => { project.glossary = glossaryTe
 origVolSelect.addEventListener('change', () => { project.origVol = origVolSelect.value; saveState(); });
 speedSelect.addEventListener('change', () => { project.speed = speedSelect.value; saveState(); });
 
-renderBtn.addEventListener('click', async () => {
+renderBtn.addEventListener('click', () => doRender());
+function doRender() {
   const p = project;
-  await runStep('render', 5, async (signal) => {
+  return runStep('render', 5, async (signal) => {
     p.rendered = false;
     p.outputs = [];
     renderResult();
     showProgress(5, 0, t('p-render', { pct: 0 }));
-    await vtJson('POST', `/jobs/${p.jobId}/render`, {
+    try {
+      await vtJson('POST', `/jobs/${p.jobId}/render`, {
       segments: p.segments.map((s) => ({ i: s.i, start: s.start, end: s.end, text: s.tgt || '' })),
       burn_subtitles: optBurn.checked && p.hasVideo,
       original_volume: parseFloat(origVolSelect.value) || 0,
       max_speedup: parseFloat(speedSelect.value) || 1,
-    }, signal);
+      }, signal);
+    } catch (err) {
+      if (!/already running/i.test(err.message)) throw err;   // an earlier render is still going: keep polling it
+    }
     for (;;) {
       await sleep(1500);
       if (signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
@@ -1164,7 +1206,45 @@ renderBtn.addEventListener('click', async () => {
     }
     p.rendered = true;
   });
-});
+}
+
+
+// ── Auto mode: run every remaining step with the current settings ────────────
+let autoRunning = false;
+let autoCancel = false;
+let autoStepNo = 0;
+
+async function runAll() {
+  if (busy || autoRunning) return;
+  autoRunning = true;
+  autoCancel = false;
+  const p = project;
+  p.pause = optPause.checked;
+  const plan = [
+    [2, () => p.asrDone, doAsr],
+    [3, () => p.translated, doTranslate],
+    [4, () => p.dubbed, doDub],
+    [5, () => p.rendered, doRender],
+  ];
+  try {
+    for (let i = 0; i < plan.length; i++) {
+      const [stepNo, isDone, run] = plan[i];
+      if (isDone()) continue;
+      if (project !== p) break;
+      autoStepNo = stepNo;
+      const r = await run();
+      if (r !== 'ok' || autoCancel) break;
+      // one deliberate pause: let the user look over the translation before dubbing
+      if (stepNo === 3 && p.pause && !p.dubbed) { showMsg(3, t('auto-paused'), 'info'); break; }
+    }
+  } finally {
+    autoRunning = false;
+    autoStepNo = 0;
+    renderAll();
+  }
+}
+autoBtn.addEventListener('click', runAll);
+optPause.addEventListener('change', () => { project.pause = optPause.checked; saveState(); });
 
 function renderResult() {
   const p = project;
@@ -1267,6 +1347,7 @@ function renderAll() {
   srcLangSelect.value = p.srcLang;
   tgtLangSelect.value = p.tgtLang;
   optClean.checked = p.optClean;
+  optPause.checked = p.pause !== false;
   if (glossaryTextarea.value !== p.glossary) glossaryTextarea.value = p.glossary;
   optBurn.checked = p.burn;
   origVolSelect.value = p.origVol;

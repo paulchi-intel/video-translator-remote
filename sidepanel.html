@@ -776,6 +776,10 @@
     .step-progress.indeterminate .step-progress-bar > span { width: 35%; animation: status-slide 1.4s ease-in-out infinite; }
     .step-progress-text { font-size: 11px; color: #6d28d9; font-variant-numeric: tabular-nums; }
 
+    .auto-box { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 10px; background: #f5f3ff; border: 1px solid #ddd6fe; }
+    .auto-icon { width: 16px; height: 16px; flex-shrink: 0; }
+    .act-btn:hover:not(:disabled) .auto-icon { animation: hb-pop 380ms var(--e-spring); }
+
     /* segment editor */
     .seg-head { font-size: 11px; color: #6b7280; }
     .seg-list { display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow-y: auto; padding-right: 2px; }
@@ -933,6 +937,16 @@
             <select id="tgtLangSelect"></select>
           </div>
         </div>
+        <div class="auto-box">
+          <label class="check-row"><input type="checkbox" id="optPause" checked><span data-i18n="opt-pause">翻譯後暫停，讓我先檢查譯文</span></label>
+          <div class="act-row">
+            <button class="act-btn" id="autoBtn" disabled>
+              <svg class="auto-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3 5 13.5h6L10 21l9-11h-6.5z"/></svg>
+              <span class="act-label" data-i18n="btn-auto">全自動翻譯</span>
+            </button>
+          </div>
+          <div class="field-hint" data-i18n="auto-hint">用目前的設定與預設值，把剩下的步驟一路跑完。</div>
+        </div>
         <div class="field-hint" data-i18n="step1-hint">影片會在下一步上傳到 B70 處理，不會經過其他伺服器。</div>
       </div></div></div>
     </section>
@@ -1074,6 +1088,7 @@
         <div class="msg-box" id="msg5"></div>
         <div class="act-row">
           <button class="act-btn" id="renderBtn" disabled><span class="act-label" data-i18n="btn-render">合成影片</span></button>
+          <button class="act-stop" id="stop5" hidden data-i18n="btn-stop">停止</button>
         </div>
         <div class="result-box" id="resultBox" hidden>
           <video id="resultVideo" controls preload="metadata"></video>
